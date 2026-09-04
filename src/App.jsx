@@ -139,6 +139,7 @@ function App() {
     if (!activeSection) return;
     setRevealedSections((current) => ({ ...current, [activeSection]: true }));
     setActiveSection(null);
+    setTargetPos(null);
   };
 
   const handleKirbyDoubleClick = () => {

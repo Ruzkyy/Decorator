@@ -24,7 +24,14 @@ export default function Kirby({
   
   const isFirstRender = useRef(true);
   const wasChatOpen = useRef(false);
+  const onReachTargetRef = useRef(onReachTarget);
+  const onChatArriveRef = useRef(onChatArrive);
   const [isDragging, setIsDragging] = useState(false);
+
+  useEffect(() => {
+    onReachTargetRef.current = onReachTarget;
+    onChatArriveRef.current = onChatArrive;
+  }, [onReachTarget, onChatArrive]);
 
   useEffect(() => {
     if (chatOpen) {
@@ -115,10 +122,10 @@ export default function Kirby({
           
           if (dist < 10) {
              if (chatPending) {
-               if (onChatArrive) onChatArrive();
+               if (onChatArriveRef.current) onChatArriveRef.current();
              } else {
                setState("change");
-               if (onReachTarget) onReachTarget();
+               if (onReachTargetRef.current) onReachTargetRef.current();
              }
              return { x: targetPos.x, y: targetY };
           }
@@ -170,7 +177,7 @@ export default function Kirby({
       if (interval) clearInterval(interval);
     };
 
-  }, [state, targetPos, isDragging, config.dir, onReachTarget, onChatArrive, chatOpen, chatPending]);
+  }, [state, targetPos, isDragging, config.dir, chatOpen, chatPending]);
 
   // Drag & Drop
   useEffect(() => {
