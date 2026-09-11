@@ -112,7 +112,12 @@ h1 em { color: var(--acid); font-style: normal; }
 .is-revealed .card-content { max-height: 240px; margin-top: 25px; opacity: 1; }
 .has-code.is-revealed .card-content { max-height: 620px; }
 .has-diagram.is-revealed .card-content { max-height: 650px; }
+.has-patterns.is-revealed .card-content { max-height: 470px; }
 .card-content p { margin: 0; color: #c5c0b8; font-size: .92rem; line-height: 1.6; }
+.pros-cons { display: grid; gap: 20px; color: #c5c0b8; font-size: .86rem; line-height: 1.45; }
+.pros-cons h3 { margin: 0 0 8px; color: var(--acid); font: .7rem "DM Mono", monospace; letter-spacing: .08em; text-transform: uppercase; }
+.pros-cons ul { display: grid; gap: 5px; margin: 0; padding-left: 18px; }
+.pros-cons li::marker { color: var(--lilac); }
 .code-cell {
   max-height: 245px;
   margin: 20px 0 0;
@@ -144,6 +149,8 @@ h1 em { color: var(--acid); font-style: normal; }
   margin-top: 12px;
   padding: 10px 12px;
 }
+.diagram-open-button { display: block; }
+.section-open-button { display: block; }
 .code-open-button:hover, .code-close-button:hover {
   color: var(--ink);
   background: var(--acid);
@@ -196,6 +203,11 @@ h1 em { color: var(--acid); font-style: normal; }
   font: .78rem/1.6 "DM Mono", monospace;
   white-space: pre;
 }
+.diagram-modal { max-width: min(1200px, 100%); }
+.expanded-diagram { display: block; width: 100%; max-height: calc(92vh - 150px); object-fit: contain; background: #fff; }
+.section-modal { width: min(760px, 100%); }
+.expanded-section-content { margin: 0; color: #c5c0b8; font-size: 1.05rem; line-height: 1.7; }
+.expanded-section-content .pros-cons { font-size: 1rem; }
 .card-cta { position: absolute; right: 30px; bottom: 30px; color: var(--acid); }
 .kirby-chat {
   position: fixed;

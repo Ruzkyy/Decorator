@@ -1,6 +1,6 @@
 import { useState } from "react";
 import Kirby from "./components/Kirby";
-import diagramaDecoradores from "./assets/diagrama-decoradores.png";
+import diagramaClases from "./assets/diagrama-clases.png.png";
 import "./App.css";
 
 const sections = [
@@ -17,8 +17,16 @@ const sections = [
     number: "02",
     eyebrow: "Análisis",
     title: "Ventajas y desventajas",
-    content:
-      "Ventajas: evita una explosión de subclases, combina comportamientos en tiempo de ejecución y respeta la responsabilidad única. Desventajas: demasiadas capas pueden dificultar la lectura, el orden de los decoradores importa y depurar el objeto final puede requerir seguir toda la cadena.",
+    advantages: [
+      "Evita una explosión de subclases.",
+      "Combina comportamientos en tiempo de ejecución.",
+      "Respeta la responsabilidad única.",
+    ],
+    disadvantages: [
+      "Demasiadas capas pueden dificultar la lectura.",
+      "El orden de los decoradores importa.",
+      "Depurar el objeto final puede requerir seguir toda la cadena.",
+    ],
   },
   {
     id: "contexto",
@@ -107,16 +115,76 @@ const sections = [
     number: "07",
     eyebrow: "Familia estructural",
     title: "¿Con qué patrones convive?",
-    content:
-      "Decorator combina bien con Composite cuando cada nodo puede recibir capas, y con Factory Method o Abstract Factory cuando una fábrica decide qué mejoras colocar. También puede acompañar a Adapter, aunque cumplen objetivos distintos. No existe una incompatibilidad absoluta: con Proxy puede confundirse porque ambos envuelven objetos, y con Flyweight suele ser una mala combinación si las capas guardan estado propio. La elección depende de si queremos añadir responsabilidades, cambiar una interfaz o compartir memoria.",
+    patternGroups: [
+      {
+        title: "Combina bien con:",
+        items: [
+          "Composite, cuando cada nodo puede recibir capas.",
+          "Factory Method y Abstract Factory, cuando una fábrica decide qué mejoras colocar.",
+        ],
+      },
+      {
+        title: "Puede acompañar a:",
+        items: [
+          "Adapter, aunque su objetivo es cambiar una interfaz y no añadir responsabilidades.",
+        ],
+      },
+      {
+        title: "Precauciones:",
+        items: [
+          "Proxy puede confundirse con Decorator porque ambos envuelven objetos.",
+          "Flyweight suele ser una mala combinación si las capas guardan estado propio.",
+        ],
+      },
+    ],
   },
 ];
+
+function SectionContent({ section }) {
+  if (section.id === "ventajas") {
+    return (
+      <div className="pros-cons">
+        <div>
+          <h3>Ventajas:</h3>
+          <ul>
+            {section.advantages.map((item) => <li key={item}>{item}</li>)}
+          </ul>
+        </div>
+        <div>
+          <h3>Desventajas:</h3>
+          <ul>
+            {section.disadvantages.map((item) => <li key={item}>{item}</li>)}
+          </ul>
+        </div>
+      </div>
+    );
+  }
+
+  if (section.id === "compatibilidad") {
+    return (
+      <div className="pros-cons pattern-groups">
+        {section.patternGroups.map((group) => (
+          <div key={group.title}>
+            <h3>{group.title}</h3>
+            <ul>
+              {group.items.map((item) => <li key={item}>{item}</li>)}
+            </ul>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return <p>{section.content}</p>;
+}
 
 function App() {
   const [targetPos, setTargetPos] = useState(null);
   const [activeSection, setActiveSection] = useState(null);
   const [revealedSections, setRevealedSections] = useState({});
   const [isCodeOpen, setIsCodeOpen] = useState(false);
+  const [isDiagramOpen, setIsDiagramOpen] = useState(false);
+  const [expandedSection, setExpandedSection] = useState(null);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isChatPending, setIsChatPending] = useState(false);
   const [chatInput, setChatInput] = useState("");
@@ -253,7 +321,7 @@ function App() {
             const isRevealed = revealedSections[section.id];
             return (
               <article
-                className={`info-card ${isRevealed ? "is-revealed" : ""} ${section.code ? "has-code" : ""} ${section.id === "implementacion" ? "has-diagram" : ""}`}
+                className={`info-card ${isRevealed ? "is-revealed" : ""} ${section.code ? "has-code" : ""} ${section.id === "implementacion" ? "has-diagram" : ""} ${section.patternGroups ? "has-patterns" : ""}`}
                 key={section.id}
                 onClick={(event) => handleSectionClick(event, section.id)}
               >
@@ -264,13 +332,37 @@ function App() {
                 <h2>{section.title}</h2>
                 <div className="card-bracket">[ {isRevealed ? "ABIERTA" : "BLOQUEADA"} ]</div>
                 <div className="card-content">
-                  <p>{section.content}</p>
+                  <SectionContent section={section} />
+                  {!section.code && section.id !== "implementacion" && (
+                    <button
+                      className="code-open-button section-open-button"
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setExpandedSection(section);
+                      }}
+                    >
+                      Ampliar sección ↗
+                    </button>
+                  )}
                   {section.id === "implementacion" && (
-                    <img
-                      className="decorator-diagram"
-                      src={diagramaDecoradores}
-                      alt="Diagrama de Personaje, Enemigo, Decorator, Casco, Armadura y Botas"
-                    />
+                    <>
+                      <img
+                        className="decorator-diagram"
+                        src={diagramaClases}
+                        alt="Diagrama UML de Personaje, Enemigo, Decorador, Casco, Armadura, Pantalon y Botas"
+                      />
+                      <button
+                        className="code-open-button diagram-open-button"
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setIsDiagramOpen(true);
+                        }}
+                      >
+                        Ampliar diagrama ↗
+                      </button>
+                    </>
                   )}
                   {section.code && (
                     <>
@@ -359,6 +451,56 @@ function App() {
               </button>
             </div>
             <pre className="code-modal-content"><code>{sections.find((section) => section.id === "codigo").code.join("\n")}</code></pre>
+          </section>
+        </div>
+      )}
+      {isDiagramOpen && (
+        <div className="code-modal-backdrop" role="presentation" onClick={() => setIsDiagramOpen(false)}>
+          <section
+            className="code-modal diagram-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="diagrama-ampliado"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="code-modal-header">
+              <div>
+                <span className="modal-kicker">CASO PRÁCTICO · UML</span>
+                <h2 id="diagrama-ampliado">Diagrama de clases</h2>
+              </div>
+              <button className="code-close-button" type="button" onClick={() => setIsDiagramOpen(false)} aria-label="Cerrar diagrama">
+                Cerrar ×
+              </button>
+            </div>
+            <img
+              className="expanded-diagram"
+              src={diagramaClases}
+              alt="Diagrama UML ampliado del patrón Decorator"
+            />
+          </section>
+        </div>
+      )}
+      {expandedSection && (
+        <div className="code-modal-backdrop" role="presentation" onClick={() => setExpandedSection(null)}>
+          <section
+            className="code-modal section-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="seccion-ampliada"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="code-modal-header">
+              <div>
+                <span className="modal-kicker">{expandedSection.eyebrow}</span>
+                <h2 id="seccion-ampliada">{expandedSection.title}</h2>
+              </div>
+              <button className="code-close-button" type="button" onClick={() => setExpandedSection(null)} aria-label="Cerrar sección">
+                Cerrar ×
+              </button>
+            </div>
+            <div className="expanded-section-content">
+              <SectionContent section={expandedSection} />
+            </div>
           </section>
         </div>
       )}
