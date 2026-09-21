@@ -1,5 +1,4 @@
-const model = "gemini-3.6-flash";
-const systemInstruction = "Responde únicamente preguntas sobre el patrón de diseño Decorator, sus conceptos, estructura, implementación, ventajas, desventajas y relación con otros patrones estructurales. Si preguntan por cualquier otro tema, responde exactamente: Solo puedo responder preguntas sobre el patrón Decorator.";
+import { askGemini } from "../server/gemini.js";
 
 export default async function handler(request, response) {
   response.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -22,29 +21,7 @@ export default async function handler(request, response) {
   }
 
   try {
-    const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": apiKey,
-        },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: systemInstruction }] },
-          contents: [{ role: "user", parts: [{ text: message.trim() }] }],
-        }),
-      },
-    );
-    const data = await geminiResponse.json();
-
-    if (!geminiResponse.ok) {
-      throw new Error(data.error?.message || "Gemini rechazó la solicitud.");
-    }
-
-    const reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!reply) throw new Error("Gemini no devolvió texto.");
-
+    const reply = await askGemini(message, apiKey);
     response.status(200).json({ reply });
   } catch (error) {
     response.status(502).json({ error: error.message });

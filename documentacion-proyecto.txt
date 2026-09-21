@@ -1,0 +1,765 @@
+====================================================================================================
+LABORATORIO DECORATOR - DOCUMENTACIÓN TÉCNICA DEL PROYECTO
+Proyecto: decorator-pattern (versión refactorizada a estructura MVC)
+Fecha de la documentación: 21 de septiembre de 2026
+====================================================================================================
+
+NOTA IMPORTANTE ANTES DE EMPEZAR: en este proyecto casi no hay "clases". React moderno se escribe
+con FUNCIONES. El equivalente a "una clase" es:
+  - un COMPONENTE (función que devuelve JSX, o sea, lo que se dibuja en pantalla), o
+  - un HOOK (función cuyo nombre empieza por "use" y que guarda estado y lógica).
+Las únicas clases "de verdad" que aparecen son las del ejemplo en Java que se muestra dentro del
+sitio (Personaje, Enemigo, Decorador, Casco, Armadura, Botas); se explican en el apéndice 9.
+
+CONTENIDO
+  1. Qué es el proyecto
+  2. Cómo se ejecuta, se prueba y se despliega
+  3. Arquitectura: MVC adaptado a React
+  4. Estructura de carpetas (qué contiene cada una)
+  5. Detalle archivo por archivo
+       5.1  Raíz del proyecto
+       5.2  api/            (backend en producción)
+       5.3  server/         (backend compartido)
+       5.4  src/main.jsx y src/App.jsx
+       5.5  src/data/       (Modelo: contenido)
+       5.6  src/services/   (Modelo: acceso a la API)
+       5.7  src/hooks/      (Controlador)
+       5.8  src/components/ (Vista)
+       5.9  Estilos (index.css y App.css)
+       5.10 Assets y public/
+  6. Flujos paso a paso (cómo funciona todo junto)
+  7. La máquina de estados de Kirby
+  8. Glosario de conceptos usados
+  9. Apéndice: el ejemplo del patrón Decorator (Java)
+
+
+====================================================================================================
+1. QUÉ ES EL PROYECTO
+====================================================================================================
+Es una presentación interactiva sobre el patrón de diseño ESTRUCTURAL Decorator. Es un sitio de
+una sola página (SPA) con este comportamiento:
+
+  - Muestra 7 tarjetas de contenido que empiezan BLOQUEADAS (el texto está oculto).
+  - Al hacer clic en una tarjeta, Kirby (una mascota animada) camina o vuela hasta ella, la
+    desbloquea y se duerme un rato.
+  - Cada tarjeta se puede AMPLIAR en una ventana modal (texto, código Java o diagrama UML).
+  - Con doble clic sobre Kirby se abre un CHAT con inteligencia artificial (Gemini) que solo
+    responde preguntas sobre el patrón Decorator.
+  - Kirby se puede arrastrar con el mouse y soltarlo (cae al piso).
+
+Tecnologías:
+  - React 19 (interfaz), Vite 8 (servidor de desarrollo y empaquetado), JavaScript + JSX
+    (sin TypeScript).
+  - Tailwind CSS 4 (solo se usa en Kirby.jsx) y CSS propio (App.css) para todo lo demás.
+  - oxlint (revisión de código).
+  - Backend: una función serverless (Vercel) que llama a la API de Gemini.
+
+
+====================================================================================================
+2. CÓMO SE EJECUTA, SE PRUEBA Y SE DESPLIEGA
+====================================================================================================
+Scripts (definidos en package.json):
+  npm install        Instala las dependencias (crea node_modules/).
+  npm run dev        Servidor de desarrollo de Vite (recarga en vivo). Incluye el endpoint
+                     /api/chat gracias al plugin definido en vite.config.js.
+  npm run build      Genera la versión de producción en dist/.
+  npm run lint       Revisa el código con oxlint.
+  npm run preview    Sirve dist/ localmente. OJO: NO incluye /api/chat (ver nota 5 en la
+                     sección 10), por lo que el chat no responde en este modo.
+
+Variable de entorno necesaria:
+  GEMINI_API_KEY     Clave de la API de Gemini.
+    - En local: archivo .env en la raíz (no se sube a Git; está en .gitignore).
+      vite.config.js la carga y la copia a process.env.GEMINI_API_KEY.
+    - En producción: Vercel > Settings > Environment Variables.
+
+Despliegue (GitHub + Vercel):
+  1. Se sube el repositorio a GitHub (un solo repo, un solo proyecto).
+  2. Vercel importa el repo y detecta Vite: comando "npm run build", salida "dist".
+  3. Vercel sirve dist/ como sitio estático y convierte cada archivo de api/ en una función
+     serverless. Por eso api/chat.js queda disponible en la URL /api/chat.
+  4. Cada push a la rama principal vuelve a desplegar.
+No hacen falta dos carpetas ni dos repositorios: frontend (src/) y backend (api/ + server/)
+viven dentro del mismo proyecto.
+
+
+====================================================================================================
+3. ARQUITECTURA: MVC ADAPTADO A REACT
+====================================================================================================
+MVC (Modelo - Vista - Controlador) separa las responsabilidades de una aplicación en tres roles.
+No es un patrón "nuevo para React": es la misma idea de separar responsabilidades, adaptada a
+cómo funciona React (la pantalla se redibuja sola cuando cambia el estado).
+
+  ROL           QUÉ HACE                                        DÓNDE VIVE EN ESTE PROYECTO
+  ------------  ----------------------------------------------  ------------------------------
+  MODELO        Datos y acceso a datos/servicios externos.       src/data/sections.js
+                                                                 src/services/chatService.js
+                                                                 server/gemini.js
+  VISTA         Dibuja la interfaz. Solo recibe datos por        src/components/**
+                "props" y avisa cuando el usuario hace algo.     src/App.jsx (compone)
+  CONTROLADOR   Recibe los eventos, decide qué estado cambiar    src/hooks/**
+                y coordina Vista y Modelo. NO dibuja nada.
+
+Diferencia clave con el MVC clásico de servidor: en el MVC clásico el controlador escoge qué vista
+mostrar y el servidor entrega una página nueva. Aquí el controlador solo modifica ESTADO; React
+vuelve a dibujar automáticamente lo que cambió.
+
+Flujo de datos (siempre en un solo sentido):
+
+   Usuario --(clic, doble clic, escribir)--> VISTA (components/)
+                                                |  llama a una función que recibió por props
+                                                v
+                                        CONTROLADOR (hooks/)
+                                                |  cambia el estado / pide datos
+                                                v
+                                        MODELO (data/, services/)
+                                                |  devuelve datos
+                                                v
+                                     ESTADO de React (useState)
+                                                |  React vuelve a dibujar
+                                                v
+                                          VISTA (se actualiza)
+
+Cómo se reparte entre navegador y servidor:
+
+   NAVEGADOR (React SPA)                    SERVIDOR (Vercel)                     EXTERNO
+   -----------------------                  -----------------                     -------
+   useChat -> chatService.js --POST /api/chat--> api/chat.js --> server/gemini.js --> API de Gemini
+                             <----{ reply }-----                                 <--- texto ---
+
+   En desarrollo (npm run dev), el "servidor" es un middleware dentro de vite.config.js que hace
+   lo mismo que api/chat.js y usa la misma función askGemini de server/gemini.js.
+
+Por qué existe el backend: la clave de Gemini no puede estar en el navegador (cualquiera la vería
+en las herramientas de desarrollo). La función serverless actúa como intermediaria y guarda la
+clave en el servidor.
+
+
+====================================================================================================
+4. ESTRUCTURA DE CARPETAS
+====================================================================================================
+decorator-pattern/
+|-- api/                       BACKEND en producción (funciones serverless de Vercel)
+|   `-- chat.js
+|-- server/                    BACKEND compartido (lógica que usan api/ y vite.config.js)
+|   `-- gemini.js
+|-- public/                    Archivos estáticos que se sirven tal cual (favicon.svg, icons.svg)
+|-- src/                       FRONTEND (todo el código de React)
+|   |-- main.jsx               Punto de entrada de React
+|   |-- App.jsx                Pantalla principal: solo compone hooks y componentes
+|   |-- App.css, index.css     Estilos
+|   |-- data/                  MODELO: contenido del sitio
+|   |   `-- sections.js
+|   |-- services/              MODELO: comunicación con el backend
+|   |   `-- chatService.js
+|   |-- hooks/                 CONTROLADOR: estado y lógica
+|   |   |-- useChat.js
+|   |   |-- useKirbyBehavior.js
+|   |   |-- useKirbyInteractions.js
+|   |   `-- useModal.js
+|   |-- components/            VISTA: componentes que solo dibujan
+|   |   |-- Kirby.jsx
+|   |   |-- chat/       ChatPanel.jsx
+|   |   |-- layout/     Topbar.jsx, Hero.jsx, IntroStrip.jsx, FooterNote.jsx
+|   |   |-- modals/     Modal.jsx, CodeModal.jsx, DiagramModal.jsx, SectionModal.jsx
+|   |   `-- sections/   InfoCard.jsx, SectionContent.jsx
+|   `-- assets/                Imágenes y GIF que se importan desde el código
+|       `-- kirbyAssets/       Animaciones de Kirby
+|-- dist/                      (generada) resultado de "npm run build". Se puede borrar.
+|-- node_modules/              (generada) dependencias instaladas. Se puede borrar.
+|-- index.html                 Página HTML única de la SPA
+|-- package.json / package-lock.json   Dependencias y scripts
+|-- vite.config.js             Configuración de Vite + endpoint /api/chat de desarrollo
+|-- postcss.config.js / tailwind.config.js   Configuración de Tailwind
+|-- .oxlintrc.json             Reglas del linter
+|-- .gitignore                 Qué no se sube a Git
+|-- .env                       (local y privado) GEMINI_API_KEY
+`-- README.md                  Descripción breve del proyecto
+
+Qué contiene cada carpeta y cuál es su regla:
+  api/          Solo funciones que Vercel expone como endpoints. Cada archivo = una URL
+                (api/chat.js -> /api/chat). Por eso NO se pone aquí código compartido: cualquier
+                archivo nuevo en api/ se convertiría en un endpoint público.
+  server/       Código de backend reutilizable que NO es un endpoint. Hoy: el cliente de Gemini.
+  public/       Se copia a la raíz del sitio sin procesar (por eso index.html usa "/favicon.svg").
+  src/data/     Datos puros (sin React, sin lógica). Cambiar el texto del sitio = editar aquí.
+  src/services/ Funciones que hablan con el exterior (fetch). Sin React y sin estado.
+  src/hooks/    Lógica y estado de React. Aquí ocurre "lo que pasa" (Controlador).
+  src/components/ Solo dibujan. Reciben todo por props. No hacen fetch ni guardan lógica de negocio.
+  src/assets/   Archivos que se importan con "import" (Vite les pone un nombre con hash al compilar).
+
+
+====================================================================================================
+5. DETALLE ARCHIVO POR ARCHIVO
+====================================================================================================
+
+----------------------------------------------------------------------------------------------------
+5.1 RAÍZ DEL PROYECTO
+----------------------------------------------------------------------------------------------------
+package.json
+  Identidad y scripts del proyecto. "type": "module" indica que los archivos .js usan módulos ES
+  (import/export). Dependencias de producción: react y react-dom. De desarrollo: vite,
+  @vitejs/plugin-react, tailwindcss, @tailwindcss/postcss, postcss, autoprefixer, oxlint y los
+  tipos de React.
+
+package-lock.json
+  Fija las versiones EXACTAS instaladas para que todos obtengan lo mismo. No se edita a mano.
+
+index.html
+  La única página HTML. Contiene <div id="root"></div> (donde React dibuja todo) y carga
+  /src/main.jsx con <script type="module">. Define el favicon (/favicon.svg) y el título de la
+  pestaña ("decorator-pattern").
+
+vite.config.js
+  Configura Vite con dos plugins:
+    1) react()      Soporte de React/JSX y recarga en caliente.
+    2) geminiApi()  Plugin propio: en "npm run dev" registra un middleware en /api/chat que
+                    imita a api/chat.js (para no necesitar Vercel en local).
+  Además carga las variables de entorno (loadEnv) desde la raíz y desde src/ y deja
+  GEMINI_API_KEY disponible en process.env.
+  El middleware valida en este orden: método POST (405), cuerpo JSON válido (400), clave
+  configurada (500), mensaje no vacío (400) y finalmente llama a askGemini (200 o 502).
+  Solo existe en el servidor de desarrollo (hook configureServer); no forma parte del build.
+
+postcss.config.js
+  Le dice a PostCSS que use @tailwindcss/postcss (Tailwind 4) y autoprefixer (prefijos de
+  navegador).
+
+tailwind.config.js
+  Configuración de estilo Tailwind 3 (content: index.html y src/**). En Tailwind 4 este archivo no
+  se carga automáticamente, así que hoy prácticamente no tiene efecto (ver sección 10).
+
+.oxlintrc.json
+  Reglas del linter oxlint: plugins "react" y "oxc"; "rules-of-hooks" como error (obliga a usar los
+  hooks correctamente) y "only-export-components" como advertencia.
+
+.gitignore
+  Excluye de Git: node_modules/, dist/, .env y .env.*, logs, y archivos de editor/sistema.
+
+.env  (local, privado)
+  Guarda GEMINI_API_KEY para desarrollo. Nunca debe subirse a GitHub ni compartirse en zips.
+
+README.md
+  Descripción breve, cómo ejecutar y resumen de la arquitectura MVC.
+
+dist/ y node_modules/
+  Carpetas generadas (build y dependencias). Se pueden borrar y regenerar con npm run build y
+  npm install.
+
+
+----------------------------------------------------------------------------------------------------
+5.2 api/chat.js   (BACKEND EN PRODUCCIÓN - función serverless de Vercel)
+----------------------------------------------------------------------------------------------------
+Exporta por defecto la función handler(request, response). Vercel la ejecuta cada vez que llega
+una petición a /api/chat. Solo se ocupa de HTTP; la conversación con Gemini está en server/.
+Pasos, en orden:
+  1. Fija el header Content-Type: application/json; charset=utf-8.
+  2. Si el método no es POST -> responde 405 { error: "Método no permitido." }.
+  3. Lee request.body.message. Si no es un texto o está vacío -> 400
+     { error: "Escribe una pregunta antes de enviar." }.
+  4. Lee process.env.GEMINI_API_KEY. Si falta -> 500
+     { error: "Falta configurar GEMINI_API_KEY en Vercel." }.
+  5. Llama a askGemini(message, apiKey).
+       - Éxito  -> 200 { reply: "<texto de Gemini>" }
+       - Error  -> 502 { error: "<mensaje del error>" }
+Importa askGemini desde ../server/gemini.js (Vercel empaqueta ese archivo junto con la función).
+
+
+----------------------------------------------------------------------------------------------------
+5.3 server/gemini.js   (BACKEND COMPARTIDO - cliente de Gemini) [Rol: Modelo]
+----------------------------------------------------------------------------------------------------
+Exporta:
+  MODEL               Nombre del modelo de Gemini que se consulta ("gemini-3.6-flash").
+  SYSTEM_INSTRUCTION  Instrucción de sistema: restringe al asistente a responder SOLO sobre el
+                      patrón Decorator (conceptos, estructura, implementación, ventajas,
+                      desventajas y relación con otros patrones estructurales). Para cualquier
+                      otro tema debe responder exactamente: "Solo puedo responder preguntas
+                      sobre el patrón Decorator."
+  askGemini(message, apiKey)   Función asíncrona que:
+      1. Hace fetch (POST) a
+         https://generativelanguage.googleapis.com/v1beta/models/<MODEL>:generateContent
+         con el header "x-goog-api-key" y un cuerpo con systemInstruction + la pregunta.
+      2. Si la respuesta HTTP no es correcta, lanza Error con el mensaje de Gemini (o
+         "Gemini rechazó la solicitud.").
+      3. Extrae el texto de data.candidates[0].content.parts[0].text. Si no hay texto, lanza
+         Error("Gemini no devolvió texto.").
+      4. Devuelve el texto.
+Es el ÚNICO lugar donde está la lógica de Gemini: api/chat.js y vite.config.js la reutilizan, así
+ya no hay código duplicado. Solo envía la pregunta actual (no el historial de la conversación).
+
+
+----------------------------------------------------------------------------------------------------
+5.4 src/main.jsx y src/App.jsx
+----------------------------------------------------------------------------------------------------
+src/main.jsx  (punto de entrada)
+  Busca el <div id="root"> con createRoot(...) y renderiza <App /> dentro de <StrictMode>.
+  Importa index.css (estilos globales). StrictMode, solo en desarrollo, ejecuta ciertos efectos
+  dos veces para detectar errores; no afecta a producción.
+
+src/App.jsx  (pantalla principal - solo COMPONE)
+  No tiene lógica propia: conecta los hooks (Controlador) con los componentes (Vista).
+    const { targetPos, revealedSections, isChatOpen, isChatPending, handleSectionClick,
+            handleReachTarget, handleChatArrive, handleWakeUp, onToggleChat }
+                                              = useKirbyInteractions();
+    const { activeModal, openCode, openDiagram, openSection, close } = useModal();
+    const { input, setInput, messages, isLoading, submit } = useChat();
+  Renderiza, en este orden:
+    <div class="site-shell">
+      <div class="noise" />                 textura de ruido de fondo
+      <Topbar />
+      <main id="top">
+        <Hero />  <IntroStrip />
+        <section class="content-grid">
+          { sections.map(...) -> <InfoCard ... /> }    una tarjeta por cada sección de data/
+        </section>
+        <FooterNote />
+      </main>
+      <Kirby ... />                          la mascota (siempre visible)
+      { isChatOpen && <ChatPanel ... /> }    solo si el chat está abierto
+      { activeModal?.type === "code"    && <CodeModal ... /> }
+      { activeModal?.type === "diagram" && <DiagramModal ... /> }
+      { activeModal?.type === "section" && <SectionModal ... /> }
+    </div>
+  Esos "&&" son renderizado condicional: React solo dibuja el componente si la condición es
+  verdadera. Es la Vista describiendo cómo luce cada estado; no es el controlador "decidiendo".
+  codeSection = sections.find(id === "codigo"): se busca la sección de código para pasarle su
+  arreglo de líneas al CodeModal.
+
+
+----------------------------------------------------------------------------------------------------
+5.5 src/data/sections.js   (MODELO: contenido)
+----------------------------------------------------------------------------------------------------
+Exporta el arreglo "sections" con 7 objetos. Todo el texto visible de las tarjetas está aquí.
+Campos comunes: id (identificador único), type (cómo se dibuja), number, eyebrow (rótulo pequeño)
+y title.
+
+  id              type        número  título                                  contenido extra
+  --------------  ----------  ------  --------------------------------------  ------------------
+  concepto        text        01      ¿Qué es Decorator?                       content
+  ventajas        prosCons    02      Ventajas y desventajas                   advantages[], disadvantages[]
+  contexto        text        03      Un enemigo, muchas combinaciones         content
+  implementacion  diagram     04      La solución: envolver al personaje       content (+ imagen UML)
+  codigo          code        05      El ejemplo completo en Java              content, code[] (líneas)
+  conclusiones    text        06      Conclusiones                             content
+  compatibilidad  patterns    07      ¿Con qué patrones convive?               patternGroups[] {title, items[]}
+
+Qué significa cada "type" (lo usan InfoCard y SectionContent):
+  text      Un párrafo.
+  prosCons  Dos listas: Ventajas y Desventajas.
+  patterns  Varios grupos con título y lista (Combina bien con / Puede acompañar a / Precauciones).
+  diagram   Un párrafo + el diagrama UML + botón "Ampliar diagrama".
+  code      Un párrafo + el bloque de código + botón "Ampliar código".
+Ventaja de usar "type": antes el código decidía con condiciones sobre el id ("si es ventajas...");
+ahora cada sección declara su tipo y los componentes reaccionan a él.
+
+
+----------------------------------------------------------------------------------------------------
+5.6 src/services/chatService.js   (MODELO: acceso al backend)
+----------------------------------------------------------------------------------------------------
+sendChatMessage(message)  (función asíncrona)
+  1. fetch POST a "/api/chat" con el cuerpo JSON { message }.
+  2. Revisa el header content-type: si la respuesta es JSON la lee; si no lo es (por ejemplo una
+     página de error HTML), crea un error legible: "El servidor respondió con <código> y no con
+     JSON." Así evita que la app se rompa al intentar interpretar HTML como JSON.
+  3. Si la respuesta no fue exitosa (response.ok es falso) lanza Error con el mensaje del servidor
+     o "No se pudo obtener una respuesta.".
+  4. Devuelve data.reply (el texto de Gemini).
+No usa React ni guarda estado: solo sabe hablar con el backend.
+
+
+----------------------------------------------------------------------------------------------------
+5.7 src/hooks/   (CONTROLADOR)
+----------------------------------------------------------------------------------------------------
+
+useChat.js
+  Estado y lógica de la conversación con la IA.
+  Estado:
+    input      texto que el usuario está escribiendo.
+    messages   lista de mensajes { role: "assistant" | "user", text }. Empieza con el saludo
+               "¡Hola! Pregúntame sobre el patrón Decorator."
+    isLoading  true mientras se espera la respuesta.
+  submit(event), al enviar el formulario:
+    1. event.preventDefault() (evita que el navegador recargue la página).
+    2. question = input.trim(). Si está vacía o ya hay una petición en curso, no hace nada.
+    3. Limpia el input y agrega el mensaje del usuario a messages.
+    4. isLoading = true y llama a sendChatMessage(question).
+    5. Si funciona, agrega la respuesta como mensaje "assistant". Si falla, agrega
+       "No pude responder: <motivo>".
+    6. En cualquier caso (finally) isLoading = false.
+  Devuelve: { input, setInput, messages, isLoading, submit }.
+
+useModal.js
+  Controla qué ventana modal está abierta. Un solo estado, activeModal, que puede ser:
+    null                              ninguna modal
+    { type: "code" }                  modal de código
+    { type: "diagram" }               modal del diagrama
+    { type: "section", section }      modal de una sección (guarda la sección a mostrar)
+  Funciones: openCode(), openDiagram(), openSection(section) y close() (vuelve a null).
+  Al haber un único estado, es imposible tener dos modales abiertas a la vez.
+
+useKirbyInteractions.js
+  Coordina a Kirby con las tarjetas y el chat (el "estado global" de la interacción).
+  Sistema de coordenadas de Kirby: su contenedor está fijo en el CENTRO INFERIOR de la ventana.
+    x = píxeles respecto al centro horizontal (negativo = izquierda, positivo = derecha).
+    y = píxeles respecto al piso (0 = en el piso, negativo = más arriba).
+  Estado:
+    targetPos         { x, y } a donde Kirby debe ir, o null si no hay destino.
+    activeSection     id de la tarjeta que se está desbloqueando.
+    revealedSections  objeto { idDeSección: true } con las tarjetas ya abiertas.
+    isChatOpen        el chat está abierto.
+    isChatPending     Kirby va en camino para abrir el chat.
+  Funciones:
+    handleSectionClick(event, id)   Si la tarjeta ya está abierta, no hace nada. Si no, mide la
+       tarjeta con getBoundingClientRect() y fija targetPos:
+           x = centro de la tarjeta - mitad del ancho de la ventana
+           y = borde inferior de la tarjeta - alto de la ventana + 24
+       y guarda activeSection = id. (Si y es menor que -100, la tarjeta está "en el aire" y
+       Kirby VOLARÁ; si no, CORRERÁ.)
+    handleReachTarget()   Kirby llegó: marca la tarjeta como abierta, limpia activeSection y
+       targetPos.
+    handleKirbyDoubleClick()   Si el chat ya está abierto o pendiente no hace nada. Si no, fija
+       targetPos = { x: mitad de ventana - 120, y: 0 } (esquina inferior derecha) y marca
+       isChatPending = true.
+    handleChatArrive()   Kirby llegó al lugar del chat: isChatPending = false, isChatOpen = true.
+    handleChatToggle()   Si el chat está abierto: lo cierra y limpia targetPos.
+    handleWakeUp()       Limpia targetPos (Kirby despertó y ya no tiene destino).
+    onToggleChat         Es handleChatToggle si el chat está abierto; si no, handleKirbyDoubleClick.
+                         Es lo que se ejecuta con el doble clic sobre Kirby.
+  Nota: también devuelve los "set..." y activeSection, aunque App.jsx no los usa (ver sección 10).
+
+useKirbyBehavior.js
+  El "cerebro" de Kirby: su máquina de estados, su movimiento y el arrastrar y soltar.
+  Recibe: { targetPos, onReachTarget, onChatArrive, onWakeUp, chatOpen, chatPending, onToggleChat }.
+  Estado propio:
+    pos         { x, y } actual (empieza en y = -2000 y luego se ajusta a justo arriba de la pantalla).
+    config      { dir, scale }: dir = 1 mira a la derecha, -1 a la izquierda; scale = 1.
+    state       estado de animación: drop, wander, run, fly, change, drop_sleep, sleep, bye, idle.
+    isDragging  true mientras el usuario lo arrastra.
+  Referencias (useRef, valores que sobreviven a los renders sin provocar uno nuevo):
+    isFirstRender, wasChatOpen, onReachTargetRef, onChatArriveRef.
+  Efectos (useEffect), en el orden del archivo:
+    A. Mantiene onReachTargetRef y onChatArriveRef apuntando a las versiones más recientes de los
+       callbacks. Evita que los temporizadores usen versiones viejas ("closures obsoletos").
+    B. Efecto del chat: cuando chatOpen pasa a true, cancela el arrastre y pone state = "idle".
+       Cuando el chat se cierra, pone state = "wander".
+    C. Primer render: coloca a Kirby justo por encima del borde superior (y = -alto de ventana)
+       para que empiece cayendo.
+    D. Despertar: si hay un destino (targetPos), no se está arrastrando y Kirby está en sleep,
+       drop_sleep, wander o bye (o hay chat pendiente), cambia a "fly" (destino en el aire) o
+       "run" (destino en el piso).
+    E. Bucle principal: según el estado, crea un temporizador (cada 16 ms, unos 60 cuadros por
+       segundo) que mueve a Kirby. Se detalla en la sección 7. No corre si el chat está abierto o
+       si se está arrastrando.
+    F. Arrastre: mientras isDragging, escucha mousemove (la posición sigue al mouse:
+       x = clientX - mitad de ancho, y = clientY - alto + 120) y mouseup (suelta: isDragging
+       = false y state = "drop"). Quita los listeners al terminar.
+  Manejadores que devuelve:
+    handleMouseDown(e)   Si es el botón izquierdo y el chat está cerrado: isDragging = true y
+                         state = "bye" (animación de "adiós" mientras se arrastra).
+    handleDoubleClick()  isDragging = false y ejecuta onToggleChat() (abrir/cerrar el chat).
+  Devuelve: { pos, state, config, isDragging, handleMouseDown, handleDoubleClick }.
+
+
+----------------------------------------------------------------------------------------------------
+5.8 src/components/   (VISTA)
+----------------------------------------------------------------------------------------------------
+Regla: estos componentes solo dibujan. Reciben todo por "props" y avisan de las acciones del usuario
+llamando a funciones que les pasó App.jsx. No hacen fetch ni guardan lógica de negocio.
+
+components/Kirby.jsx
+  Dibuja la mascota. Props: targetPos, onReachTarget, onChatArrive, onWakeUp, chatOpen,
+  chatPending, onToggleChat (todas se le pasan tal cual a useKirbyBehavior).
+  Contiene solo lo visual:
+    - Importa los 8 GIF y los asocia a cada estado (mapa "assets"):
+        idle -> kirby-tieso        walk / wander -> kirby-walk     run -> kirby-run
+        sleep -> kirby-sleeping    bye -> kirby-bye                drop / drop_sleep -> kirby-down
+        change -> kirby-change     fly -> kirby-fly
+    - getStyle(estado): ajusta ancho y desplazamiento vertical del GIF por estado
+        wander/walk 135px (+24px abajo) | run 100px (+6px) | idle 108px (+10px)
+        drop/drop_sleep 150px | change 85px | fly 110px (+10px) | sleep y demás 96px
+      y aplica transform: scale(config.scale) scaleX(config.dir). scaleX(-1) voltea la imagen
+      para que Kirby mire a la izquierda. imageRendering: "pixelated" mantiene nítido el pixel art.
+    - Estructura: un <div> exterior "fixed bottom-0 left-1/2 z-40 pointer-events-none" que se
+      mueve con transform: translateX(-50%) translate(pos.x, pos.y). Dentro, un <div> interior
+      "w-40 h-56 ... pointer-events-auto" (con cursor grabbing/pointer) que SÍ recibe eventos:
+      onMouseDown y onDoubleClick. Así el contenedor grande no bloquea los clics sobre la página;
+      solo Kirby los captura. (Estas clases son de Tailwind.)
+
+components/sections/InfoCard.jsx
+  Una tarjeta de contenido. Props: section (el objeto de data/), isRevealed, onReveal(event, id),
+  onOpenSection(section), onOpenCode(), onOpenDiagram().
+    - Calcula banderas por tipo: hasCode (type "code"), hasDiagram ("diagram"), hasPatterns
+      ("patterns") y showExpand (text, prosCons o patterns).
+    - <article> con clases: "info-card" + "is-revealed" (si está abierta) + "has-code" /
+      "has-diagram" / "has-patterns". Esas clases las usa el CSS para animar y dimensionar.
+    - onClick de toda la tarjeta -> onReveal(event, section.id) (inicia el viaje de Kirby).
+    - Dibuja: número y rótulo, título, la etiqueta "[ ABIERTA ]" o "[ BLOQUEADA ]" y el bloque
+      .card-content con <SectionContent />. El contenido SIEMPRE está en el DOM; el CSS lo oculta
+      hasta que la tarjeta tiene "is-revealed".
+    - Botones: "Ampliar sección" (text/prosCons/patterns), "Ampliar diagrama" + imagen UML
+      (diagram) y "Ampliar código" + <pre><code> (code). Todos hacen event.stopPropagation() para
+      que el clic en el botón no cuente también como clic en la tarjeta.
+    - Si no está abierta, muestra "Pulsa para revelar".
+
+components/sections/SectionContent.jsx
+  Dibuja el contenido textual según section.type. Props: section.
+    prosCons -> dos columnas con listas "Ventajas:" y "Desventajas:".
+    patterns -> un bloque por cada grupo de patternGroups (título + lista).
+    cualquier otro tipo (text, diagram, code) -> un párrafo con section.content.
+  Se reutiliza tanto en la tarjeta como en la modal de sección.
+
+components/chat/ChatPanel.jsx
+  El panel del chat. Props: messages, input, onInputChange, onSubmit, isLoading.
+    - Cabecera "Pregúntame sobre Decorator" y estado "EN LÍNEA".
+    - Lista de mensajes (clase "chat-message assistant" o "chat-message user"); cada uno con
+      key = rol + índice. Contenedor con aria-live="polite" para lectores de pantalla.
+    - Si isLoading, agrega el mensaje "Pensando...".
+    - Formulario: input (deshabilitado mientras carga) y botón "Enviar" (deshabilitado si está
+      cargando o el texto está vacío).
+    - Pista "Doble clic en Kirby para cerrar".
+
+components/modals/Modal.jsx
+  Contenedor reutilizable de todas las ventanas modales. Props: kicker, title, titleId,
+  closeLabel, className, onClose, children.
+    - Fondo oscuro (.code-modal-backdrop): al hacer clic, cierra.
+    - Ventana (<section role="dialog" aria-modal="true" aria-labelledby=titleId>): frena la
+      propagación del clic para que hacer clic DENTRO no cierre la modal.
+    - Cabecera con el rótulo, el título y el botón "Cerrar ×". Debajo va "children".
+
+components/modals/CodeModal.jsx
+  Props: code (arreglo de líneas), onClose. Usa Modal con rótulo "CASO PRÁCTICO · JAVA" y título
+  "Código ampliado"; dentro, <pre><code> con code.join("\n").
+
+components/modals/DiagramModal.jsx
+  Props: onClose. Usa Modal (clase extra "diagram-modal", más ancha) con rótulo
+  "CASO PRÁCTICO · UML", título "Diagrama de clases" y la imagen diagrama-clases.png.png a gran
+  tamaño.
+
+components/modals/SectionModal.jsx
+  Props: section, onClose. Usa Modal (clase extra "section-modal") con el eyebrow y el título de la
+  sección, y dentro <SectionContent /> con letra más grande.
+
+components/layout/  (sin props, sin estado: HTML estático con clases)
+  Topbar.jsx      Barra superior: marca "D/ LABORATORIO DECORATOR" (enlace a #top), enlaces a #lab,
+                  #mapa y #about, y "ED. 01 - 2026".
+  Hero.jsx        Bloque principal (id="lab"): riel lateral "PATRONES / 04 - ESTRUCTURAL", titular
+                  "DECORA AL ENEMIGO", texto de introducción, la ilustración con órbitas y las
+                  etiquetas "+ CASCO / + ARMADURA / + ESCUDO".
+  IntroStrip.jsx  Franja (id="mapa") que invita a hacer clic en cada módulo para que Kirby lo
+                  desbloquee.
+  FooterNote.jsx  Cierre (id="about") con la frase "El patrón no cambia al enemigo. Cambia lo que
+                  el enemigo puede hacer."
+  Los enlaces de la barra superior usan esos ids como anclas (scroll suave por CSS).
+
+
+----------------------------------------------------------------------------------------------------
+5.9 ESTILOS
+----------------------------------------------------------------------------------------------------
+src/index.css
+  Importa Tailwind ("@import 'tailwindcss'") y aplica un reset mínimo al body (margin 0,
+  min-width 320px). Se carga desde main.jsx.
+
+src/App.css   (se carga desde App.jsx)
+  Todo el diseño propio del sitio. Organización:
+    - Fuentes: importa Google Fonts (DM Mono y Space Grotesk); requiere internet.
+    - Variables de color en :root: --ink (fondo casi negro), --paper (texto claro), --muted
+      (gris), --line (líneas), --acid (verde lima de acento) y --lilac (lila secundario).
+    - Un bloque por componente: .topbar, .hero-*, .intro-strip, .content-grid, .info-card,
+      .code-modal*, .kirby-chat*, .footer-note.
+    - Mecanismo de tarjetas bloqueadas: .card-content empieza con max-height: 0, opacity: 0 y
+      overflow: hidden; .is-revealed .card-content lo expande con una transición. Variantes:
+      .has-code (hasta 620px), .has-diagram (650px), .has-patterns (470px), normal 240px.
+    - Capas (z-index): Kirby 40, chat 70, modales 80.
+    - Chat: posición fija abajo a la derecha (bottom: 224px) con una "colita" (::after) que
+      apunta hacia Kirby.
+    - Responsivo: @media (max-width: 850px) reorganiza a una sola columna y oculta los enlaces.
+  IMPORTANTE: los nombres de clase (info-card, is-revealed, code-modal...) los usan los
+  componentes. Si se renombra una clase en el JSX hay que renombrarla también aquí.
+
+
+----------------------------------------------------------------------------------------------------
+5.10 ASSETS Y public/
+----------------------------------------------------------------------------------------------------
+src/assets/
+  diagrama-clases.png.png   Diagrama UML del ejemplo. Se usa en la tarjeta 04 y en DiagramModal.
+                            (El nombre tiene doble extensión; funciona, pero conviene renombrarlo.)
+  kirbyAssets/              8 GIF que usa Kirby.jsx: kirby-tieso, kirby-walk, kirby-run,
+                            kirby-sleeping, kirby-bye, kirby-down, kirby-change, kirby-fly.
+  Sin uso actualmente:      diagrama-decoradores.png (920 KB), hero.png, react.svg, vite.svg.
+  Al compilar, Vite copia los assets importados a dist/assets con un hash en el nombre.
+
+public/
+  favicon.svg   Icono de la pestaña (lo referencia index.html).
+  icons.svg     Sin referencias actualmente.
+
+
+====================================================================================================
+6. FLUJOS PASO A PASO (CÓMO FUNCIONA TODO JUNTO)
+====================================================================================================
+
+6.1 Arranque de la aplicación
+  1. El navegador carga index.html y ejecuta /src/main.jsx.
+  2. main.jsx monta <App /> dentro de <div id="root">.
+  3. App ejecuta sus tres hooks. Estado inicial: sin destino para Kirby, ninguna tarjeta abierta,
+     ninguna modal, chat cerrado y con el mensaje de saludo.
+  4. Se dibujan las 7 tarjetas (todas BLOQUEADAS) y a Kirby.
+  5. Kirby empieza en estado "drop": cae desde arriba con un leve balanceo. Al tocar el piso
+     pasa a "wander" y camina de lado a lado.
+
+6.2 Desbloquear una tarjeta
+  1. El usuario hace clic en una InfoCard -> onReveal(event, id) -> handleSectionClick.
+  2. Si la tarjeta ya estaba abierta, no pasa nada. Si no, se mide su posición en pantalla y se
+     guardan targetPos (destino) y activeSection.
+  3. App se vuelve a dibujar y Kirby recibe la nueva prop targetPos.
+  4. El efecto "despertar" de useKirbyBehavior cambia el estado a "run" (destino en el piso) o
+     "fly" (destino en el aire).
+  5. El bucle principal mueve a Kirby cada 16 ms hacia el destino (6 px por tick corriendo, 8
+     volando) y voltea su imagen según hacia dónde va.
+  6. Al estar a menos de 10 px: state = "change" y se llama a onReachTarget -> handleReachTarget.
+  7. handleReachTarget marca la tarjeta en revealedSections y limpia activeSection y targetPos.
+  8. React dibuja la tarjeta con isRevealed = true: se añade la clase "is-revealed", el CSS
+     despliega el contenido y la etiqueta cambia a "[ ABIERTA ]".
+  9. Kirby se transforma 1,2 s (change), cae al piso (drop_sleep) y duerme 10 s (sleep).
+ 10. Al terminar de dormir llama a onWakeUp (limpia el destino) y vuelve a "wander".
+
+6.3 Ampliar una sección, el código o el diagrama
+  1. Clic en un botón "Ampliar ..." (con stopPropagation: no desbloquea la tarjeta).
+  2. Se llama a openSection(section), openCode() o openDiagram() de useModal -> cambia activeModal.
+  3. App muestra la modal correspondiente (SectionModal, CodeModal o DiagramModal).
+  4. Se cierra con el botón "Cerrar ×" o haciendo clic en el fondo oscuro -> close() -> null.
+
+6.4 Abrir y cerrar el chat
+  Abrir:
+  1. Doble clic sobre Kirby -> handleDoubleClick -> onToggleChat, que con el chat cerrado es
+     handleKirbyDoubleClick.
+  2. Se fija como destino la esquina inferior derecha del piso y isChatPending = true.
+  3. Kirby corre hasta allí. Al llegar, como hay chat pendiente, llama a onChatArrive
+     (isChatPending = false, isChatOpen = true) en lugar de desbloquear una tarjeta.
+  4. App muestra <ChatPanel />. Kirby queda en "idle" (quieto) y su bucle de movimiento se pausa.
+  Cerrar:
+  5. Nuevo doble clic -> onToggleChat es ahora handleChatToggle -> isChatOpen = false y sin
+     destino. Kirby vuelve a "wander".
+
+6.5 Enviar una pregunta al chat
+  1. El usuario escribe en el input (setInput) y envía el formulario -> submit de useChat.
+  2. useChat agrega el mensaje del usuario, activa isLoading ("Pensando...") y llama a
+     sendChatMessage.
+  3. chatService hace POST /api/chat con { message }.
+  4. Endpoint:
+       - Producción: Vercel ejecuta api/chat.js.
+       - Desarrollo: responde el middleware de vite.config.js.
+     Ambos validan la petición y llaman a askGemini (server/gemini.js).
+  5. askGemini consulta la API de Gemini con la instrucción de sistema (solo Decorator) y
+     devuelve el texto.
+  6. El endpoint responde { reply } (200) o { error } (400/405/500/502).
+  7. chatService devuelve el texto o lanza un Error.
+  8. useChat agrega la respuesta (o "No pude responder: ...") y pone isLoading = false.
+     ChatPanel se actualiza solo.
+
+6.6 Arrastrar a Kirby
+  1. Clic izquierdo sostenido sobre Kirby (con el chat cerrado) -> isDragging = true, state = "bye".
+  2. Mientras se mueve el mouse, su posición sigue al cursor (efecto F). El bucle principal se
+     pausa.
+  3. Al soltar (mouseup): isDragging = false y state = "drop": cae hasta el piso y luego pasa a
+     "wander" (o "run" si hay un destino pendiente).
+
+
+====================================================================================================
+7. LA MÁQUINA DE ESTADOS DE KIRBY
+====================================================================================================
+Kirby siempre está en UNO de estos estados (variable "state" en useKirbyBehavior). El bucle
+principal se ejecuta cada 16 ms. Distancias en píxeles por "tick" de 16 ms.
+
+  ESTADO      GIF              QUÉ HACE                                        SIGUIENTE ESTADO
+  ----------  ---------------  ----------------------------------------------  ---------------------
+  drop        kirby-down       Cae 2,5 px por tick con un balanceo horizontal  Al llegar al piso:
+                               senoidal.                                       run (si hay destino)
+                                                                               o wander
+  wander      kirby-walk       Camina 2 px por tick. Rebota al llegar a        Si aparece un destino:
+                               +/-(mitad del ancho - 100 px) cambiando dir.    run o fly
+  run         kirby-run        Va hacia (destino.x, piso) a 6 px por tick y    Llegó (<10 px): abre
+                               mira hacia donde avanza.                        chat, o change +
+                                                                               revela tarjeta.
+                                                                               Sin destino: wander
+  fly         kirby-fly        Igual que run, pero hacia (destino.x,           Igual que run
+                               destino.y) a 8 px por tick.
+  change      kirby-change     Quieto 1,2 s (animación de transformación).     drop_sleep
+  drop_sleep  kirby-down       Cae 3 px por tick hasta el piso.                sleep
+  sleep       kirby-sleeping   Quieto 10 s.                                    onWakeUp() y wander
+  bye         kirby-bye        Se está arrastrando; el bucle no se ejecuta.    Al soltar: drop
+  idle        kirby-tieso      El chat está abierto: quieto.                   Al cerrar chat: wander
+
+Reglas de cambio "externas" (efectos):
+  - Hay destino y Kirby está en sleep, drop_sleep, wander o bye (o hay chat pendiente): pasa a
+    run (destino en el piso) o fly (destino en el aire: targetPos.y menor que -100).
+  - Chat abierto: isDragging = false y state = idle. Chat cerrado (tras haber estado abierto):
+    state = wander.
+  - En "run"/"fly" sin destino: vuelve a wander.
+El movimiento de "run" y "fly" hacia el destino usa geometría simple: se calcula el vector hasta
+el destino, se normaliza (se divide por la distancia) y se avanza "velocidad" píxeles en esa
+dirección en cada tick.
+
+
+====================================================================================================
+8. GLOSARIO DE CONCEPTOS USADOS
+====================================================================================================
+SPA (Single Page Application)  Un solo index.html; React redibuja el contenido sin recargar.
+Componente      Función que devuelve JSX (lo que se dibuja). Ej.: InfoCard, Modal.
+JSX             Sintaxis que mezcla JavaScript con etiquetas parecidas a HTML.
+Props           Datos y funciones que un componente padre le pasa a su hijo. Solo lectura.
+Estado          Datos que, al cambiar, hacen que React vuelva a dibujar. Se crea con useState.
+useEffect       Ejecuta código como reacción a cambios (timers, listeners, sincronizar con algo
+                externo). Devuelve una función de limpieza que se ejecuta antes de repetirse.
+useRef          Caja que guarda un valor entre renders SIN provocar un nuevo render.
+Hook            Función "use..." que da estado/lógica a un componente. Custom hook: uno propio
+                (useChat, useModal, ...) para agrupar y reutilizar lógica.
+Renderizado condicional   Dibujar algo solo si se cumple una condición: {cond && <Componente />}.
+key             Identificador que React usa para distinguir elementos de una lista.
+Componente presentacional   Componente que solo dibuja según sus props (la "Vista").
+Serverless      Función que el proveedor (Vercel) ejecuta bajo demanda, sin administrar servidor.
+Endpoint        URL de un servicio del backend (aquí: /api/chat).
+Middleware      Código que intercepta una petición antes de responderla (el plugin de Vite).
+Módulo ES       Archivo con import/export ("type": "module" en package.json).
+Vite            Herramienta que sirve el proyecto en desarrollo y lo empaqueta para producción.
+Tailwind        Framework de CSS con clases utilitarias (aquí solo en Kirby.jsx).
+Linter          Herramienta que revisa el código y avisa de errores o malas prácticas (oxlint).
+Closure obsoleto (stale closure)  Cuando una función guardada usa valores viejos de un render
+                anterior; por eso Kirby guarda los callbacks en refs.
+
+
+====================================================================================================
+9. APÉNDICE: EL EJEMPLO DEL PATRÓN DECORATOR (JAVA)
+====================================================================================================
+Este es el ejemplo que muestra el sitio (sección 05). Son las únicas "clases" reales del contenido.
+
+  interface Personaje                Contrato común: defensa() y velocidad().
+  class Enemigo implements Personaje El objeto base. defensa() = 10, velocidad() = 10.
+  abstract class Decorador implements Personaje
+                                     Implementa la MISMA interfaz y guarda una referencia al
+                                     personaje envuelto (protected Personaje personaje). Por
+                                     defecto delega: defensa() y velocidad() llaman al envuelto.
+  class Casco extends Decorador      Sobrescribe defensa(): super.defensa() + 5.
+  class Armadura extends Decorador   Sobrescribe defensa(): super.defensa() + 20.
+  class Botas extends Decorador      Sobrescribe velocidad(): super.velocidad() + 5.
+
+Uso:
+  Personaje enemigo = new Botas(new Armadura(new Casco(new Enemigo())));
+
+Cómo se resuelve enemigo.defensa() (recorre la cadena de afuera hacia adentro y suma al volver):
+  Botas.defensa()    no la sobrescribe -> Decorador delega al envuelto
+  Armadura.defensa() = Casco.defensa() + 20
+  Casco.defensa()    = Enemigo.defensa() + 5
+  Enemigo.defensa()  = 10
+  Resultado: 10 + 5 + 20 = 35
+
+Y enemigo.velocidad():
+  Botas.velocidad() = (Armadura -> Casco -> Enemigo = 10) + 5 = 15
+  (Armadura y Casco no sobrescriben velocidad(): solo delegan.)
+
+Por qué es Decorator: cada capa añade UNA responsabilidad, mantiene la misma interfaz y envuelve a
+otro objeto. Se pueden combinar capas en tiempo de ejecución sin crear una subclase por cada
+combinación (con herencia harían falta Enemigo+Casco, Enemigo+Armadura, Enemigo+Casco+Armadura...).
+
+====================================================================================================
+FIN DEL DOCUMENTO
+====================================================================================================

@@ -1,6 +1,7 @@
 import react from '@vitejs/plugin-react'
 import { defineConfig, loadEnv } from 'vite'
 import path from 'node:path'
+import { askGemini } from './server/gemini.js'
 
 const geminiApi = () => ({
   name: "gemini-chat-api",
@@ -37,31 +38,7 @@ const geminiApi = () => ({
       }
 
       try {
-        const geminiResponse = await fetch(
-          "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-goog-api-key": apiKey,
-            },
-            body: JSON.stringify({
-              systemInstruction: {
-                parts: [{
-                  text: "Responde únicamente preguntas sobre el patrón de diseño Decorator, sus conceptos, estructura, implementación, ventajas, desventajas y relación con otros patrones estructurales. Si preguntan por cualquier otro tema, responde exactamente: Solo puedo responder preguntas sobre el patrón Decorator.",
-                }],
-              },
-              contents: [{ role: "user", parts: [{ text: body.message.trim() }] }],
-            }),
-          },
-        );
-        const data = await geminiResponse.json();
-        if (!geminiResponse.ok) {
-          throw new Error(data.error?.message || "Gemini rechazó la solicitud.");
-        }
-
-        const reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!reply) throw new Error("Gemini no devolvió texto.");
+        const reply = await askGemini(body.message, apiKey);
         response.statusCode = 200;
         response.setHeader("Content-Type", "application/json; charset=utf-8");
         response.end(JSON.stringify({ reply }));
