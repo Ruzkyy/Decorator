@@ -23,7 +23,7 @@ const geminiApi = () => ({
         return;
       }
 
-      const apiKey = process.env.GEMINI_API_KEY;
+      const apiKey = process.env.GEMINI_API_KEY?.trim();
       if (!apiKey) {
         response.statusCode = 500;
         response.end(JSON.stringify({ error: "Falta configurar GEMINI_API_KEY en el entorno." }));
@@ -63,11 +63,11 @@ const geminiApi = () => ({
         const reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
         if (!reply) throw new Error("Gemini no devolvió texto.");
         response.statusCode = 200;
-        response.setHeader("Content-Type", "application/json");
+        response.setHeader("Content-Type", "application/json; charset=utf-8");
         response.end(JSON.stringify({ reply }));
       } catch (error) {
         response.statusCode = 502;
-        response.setHeader("Content-Type", "application/json");
+        response.setHeader("Content-Type", "application/json; charset=utf-8");
         response.end(JSON.stringify({ error: error.message }));
       }
     });
