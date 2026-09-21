@@ -246,7 +246,10 @@ function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: question }),
       });
-      const data = await response.json();
+      const contentType = response.headers.get("content-type") || "";
+      const data = contentType.includes("application/json")
+        ? await response.json()
+        : { error: `El servidor respondió con ${response.status} y no con JSON.` };
       if (!response.ok) throw new Error(data.error || "No se pudo obtener una respuesta.");
       setChatMessages((messages) => [...messages, { role: "assistant", text: data.reply }]);
     } catch (error) {
